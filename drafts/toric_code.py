@@ -2,34 +2,38 @@ import stac
 import bidict
 
 
-#This is built upon the surface code version of this file using Bing AI
-def _toric_codes_syndrome_measurements(row, col):
+def _toric_codes_syndrome_measurements(rows, cols):
     '''
     This function creates a syndrome measurement circuit for the Toric Code of any dimension. 
     Parameters
     -----------
-    col : The number of qubits in a horizontal line. 
+    cols : The number of qubits in a horizontal line. 
     
-    row : The number of qubits in a vertical line.
+    rows : The number of qubits in a vertical line.
         
     Returns    stac.Circuit with appended gates
     '''
 
+    #Base Case
+    if rows < 2 or cols < 2:
+        print("The number of rows and columns should be greater than 2")
+        return None
+    
+
     # Initialize a stac.Circuit object to represent the Toric Code circuit
     toric_code_circ = stac.Circuit()
     
-    num = row * col
+    num_qubits = rows * cols
 
-    # Determine the number of data points and syndrome points
     # In the Toric Code, the number of data points and syndrome points is always equal to half the total number of qubits
-    d_num = s_num = num // 2
+    num_data_qubits = num_syndrome_qubits = num_qubits // 2
 
     # Append two stac.QubitRegister objects to the circuit, one for data points and one for syndrome points
-    toric_code_circ.append_register(stac.QubitRegister('d', 0, d_num))
-    toric_code_circ.append_register(stac.QubitRegister('s', 0, s_num))
+    toric_code_circ.append_register(stac.QubitRegister('d', 0, num_data_qubits))
+    toric_code_circ.append_register(stac.QubitRegister('s', 0, num_syndrome_qubits))
 
     # Assign coordinates to the physical register elements of the circuit
-    toric_code_circ.physical_register.elements = [stac.PhysicalQubit(col*i+j, (j, i), []) for i in range(row) for j in range(col)]
+    toric_code_circ.physical_register.elements = [stac.PhysicalQubit(cols*i+j, (j, i), []) for i in range(rows) for j in range(cols)]
 
     # Initialize the layout map of the circuit using a bidirectional dictionary
     toric_code_circ.layout_map = bidict.bidict()
@@ -39,29 +43,28 @@ def _toric_codes_syndrome_measurements(row, col):
     s_i = 0
 
     # Iterate over the rows and columns of the circuit to assign data and syndrome points to their respective registers
-    for i in range(row):
+    for i in range(rows):
         if i % 2 == 0:
-            for j in range(col):
-                if j % 2 == 0:
-                    # Assign data point to register and update layout map
-                    toric_code_circ.register[(0,0, d_i)].constituent_register = toric_code_circ.physical_register.elements[col*i+j]
+            for j in range(cols):
+                if j % 2 != 0:
+                    toric_code_circ.register[(0,0, d_i)].constituent_register = toric_code_circ.physical_register.elements[cols*i+j]
                     toric_code_circ.layout_map[(0,0,d_i)] = (j, i)
                     d_i += 1
 
                 else:
-                    toric_code_circ.register[(0,1,s_i)].constituent_register = toric_code_circ.physical_register.elements[col*i+j]
+                    toric_code_circ.register[(0,1,s_i)].constituent_register = toric_code_circ.physical_register.elements[cols*i+j]
                     toric_code_circ.layout_map[(0,1,s_i)] = (j, i)
                     s_i += 1
 
         else:
-            for j in range(col):
-                if j % 2 != 0:
-                    toric_code_circ.register[(0,0, d_i)].constituent_register = toric_code_circ.physical_register.elements[col*i+j]
+            for j in range(cols):
+                if j % 2 == 0:
+                    toric_code_circ.register[(0,0, d_i)].constituent_register = toric_code_circ.physical_register.elements[cols*i+j]
                     toric_code_circ.layout_map[(0,0,d_i)] = (j, i)
                     d_i += 1
 
                 else:
-                    toric_code_circ.register[(0,1,s_i)].constituent_register = toric_code_circ.physical_register.elements[col*i+j]
+                    toric_code_circ.register[(0,1,s_i)].constituent_register = toric_code_circ.physical_register.elements[cols*i+j]
                     toric_code_circ.layout_map[(0,1,s_i)] = (j, i)
                     s_i += 1
 
@@ -75,16 +78,15 @@ def _toric_codes_syndrome_measurements(row, col):
         s_coordinate = qubit.constituent_register.coordinates
 
         # Calculate the coordinates of neighboring data qubits to wrap around the edges of the lattice
-        d_1 = (qubit.constituent_register.coordinates[0], (qubit.constituent_register.coordinates[1]+1) % row)
-        d_2 = ((qubit.constituent_register.coordinates[0]-1) % col, qubit.constituent_register.coordinates[1])
-        d_3 = ((qubit.constituent_register.coordinates[0]+1) % col, qubit.constituent_register.coordinates[1])
-        d_4 = (qubit.constituent_register.coordinates[0], (qubit.constituent_register.coordinates[1]-1) % row)
+        d_1 = (qubit.constituent_register.coordinates[0], (qubit.constituent_register.coordinates[1]+1) % rows)
+        d_2 = ((qubit.constituent_register.coordinates[0]-1) % cols, qubit.constituent_register.coordinates[1])
+        d_3 = ((qubit.constituent_register.coordinates[0]+1) % cols, qubit.constituent_register.coordinates[1])
+        d_4 = (qubit.constituent_register.coordinates[0], (qubit.constituent_register.coordinates[1]-1) % rows)
 
         if s_coordinate[1] % 2 == 0: #Z Stabilizer
             # Apply CX gates between the syndrome qubit and its neighboring data qubits in the north, south, east, and west directions
             for i in [d_1, d_2, d_3, d_4]:
-                if -1 < i[0] < col and -1 < i[1] < row:
-                    toric_code_circ.geo_append('CX', i, s_coordinate)
+                toric_code_circ.geo_append('CX', i, s_coordinate)
             # Apply a TICK gate to advance the circuit to the next time step
             toric_code_circ.geo_append('TICK')
 
@@ -93,13 +95,12 @@ def _toric_codes_syndrome_measurements(row, col):
             toric_code_circ.geo_append('H', s_coordinate)
 
             for i in [d_1, d_2, d_3, d_4]:
-                if -1 < i[0] < col and -1 < i[1] < row:
-                    toric_code_circ.geo_append('CX', s_coordinate, i)
+                toric_code_circ.geo_append('CX', s_coordinate, i)
 
             toric_code_circ.geo_append('H', s_coordinate)
             toric_code_circ.geo_append('TICK')
 
-    return toric
+    return toric_code_circ
 
 
 
