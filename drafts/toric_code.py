@@ -18,6 +18,9 @@ def _toric_codes_syndrome_measurements(rows, cols):
     if rows < 2 or cols < 2:
         print("The number of rows and columns should be greater than 2")
         return None
+    elif rows%2 !=0 or cols%2 !=0:
+        print("The number of rows and columns must be even")
+        return None
     
 
     # Initialize a stac.Circuit object to represent the Toric Code circuit
